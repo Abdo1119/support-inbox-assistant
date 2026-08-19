@@ -1,0 +1,21 @@
+{
+  "_README": "Ground-truth labels for a subset of tickets, for the evaluation harness. Allowed categories: billing | bug | feature_request | account | security | other. Allowed priorities: low | medium | high | urgent. These are reasonable human labels, not gospel - a few are genuinely debatable, which is realistic. Report your accuracy honestly.",
+  "labels": [
+    { "id": "T-001", "category": "billing",         "priority": "high"   },
+    { "id": "T-002", "category": "bug",             "priority": "high"   },
+    { "id": "T-003", "category": "feature_request", "priority": "low"    },
+    { "id": "T-005", "category": "account",         "priority": "high"   },
+    { "id": "T-006", "category": "bug",             "priority": "urgent" },
+    { "id": "T-007", "category": "other",           "priority": "medium" },
+    { "id": "T-009", "category": "billing",         "priority": "low"    },
+    { "id": "T-011", "category": "feature_request", "priority": "medium" },
+    { "id": "T-012", "category": "bug",             "priority": "high"   },
+    { "id": "T-013", "category": "account",         "priority": "low"    },
+    { "id": "T-016", "category": "bug",             "priority": "medium" },
+    { "id": "T-017", "category": "billing",         "priority": "medium" },
+    { "id": "T-019", "category": "bug",             "priority": "urgent" },
+    { "id": "T-021", "category": "account",         "priority": "high"   },
+    { "id": "T-022", "category": "bug",             "priority": "medium" },
+    { "id": "T-024", "category": "feature_request", "priority": "medium" }
+  ]
+}

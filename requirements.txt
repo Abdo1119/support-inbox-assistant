@@ -1,0 +1,43 @@
+# Pinned exactly. A two-day project that will be run by someone else values a
+# reproducible install over picking up upstream fixes; every version below is
+# the one this was actually developed and measured against.
+
+# Backend framework. Chosen because Pydantic is native to it: the same model
+# validates untrusted LLM output, shapes the API response, and documents the
+# endpoint in OpenAPI -- one schema, three jobs.
+fastapi==0.128.0
+
+# ASGI server. FastAPI ships no server of its own, so nothing runs without it.
+# Plain rather than uvicorn[standard]: the extras add uvloop (not used on
+# Windows), httptools, and watchfiles, none of which this project needs.
+uvicorn==0.40.0
+
+# Imported directly for the LLM output schema. Declared explicitly rather than
+# leaned on transitively through fastapi, because the schema work depends on it
+# in its own right and should not break if fastapi loosens its pin.
+pydantic==2.12.5
+
+# Environment-backed settings with type coercion and fail-fast validation.
+# Same validation idiom as the LLM output schema, so the project has one way of
+# validating untrusted input rather than two.
+pydantic-settings==2.12.0
+
+# LLM client. The reference implementation of the OpenAI-compatible contract
+# that Ollama exposes, so switching providers stays a .env change.
+openai==2.17.0
+
+# Test runner.
+pytest==9.0.2
+
+# Required by starlette's TestClient, which the API tests use. It also arrives
+# via openai, but the tests import it directly, so it is declared directly
+# rather than depending on another package's dependency choices.
+httpx==0.28.1
+
+# Deliberately absent, since "justify every line" cuts both ways:
+#   python-dotenv  - a hard dependency of pydantic-settings (Requires-Dist:
+#                    python-dotenv>=0.21.0) and never imported by us.
+#   starlette, annotated-types, typing-extensions - transitive.
+#   a database driver - sqlite3 is in the standard library.
+#   jinja2 - the frontend is one static HTML file, with no templating.
+#   requests - openai already brings httpx.

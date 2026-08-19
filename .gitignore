@@ -1,0 +1,30 @@
+# --- Secrets. Only the template is tracked. ---
+.env
+.env.*
+!.env.example
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Python bytecode and tool caches ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- SQLite. The database is built by the app from data/, never a source file. ---
+*.db
+*.db-journal
+*.sqlite3
+
+# --- Phase 0 exploration. Kept locally while iterating, deleted before submission. ---
+scratch_failure.py
+failures.txt
+
+# --- Editor and OS noise ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
