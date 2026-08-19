@@ -80,10 +80,12 @@ Four layers of failure, and only three are catchable in code:
 3. **Semantic** — parses but out of schema (bad enum, out-of-range confidence) → retry **with the validation error as feedback**.
 4. **Content** — schema-valid but the judgement is wrong → **not catchable in code.** This is what the eval and the human reviewer exist for.
 
-Retries: **one or two maximum**, with backoff. At the Phase 0 steady-state mean
-of 5.3s, 30 tickets × 1 attempt is ~2.6 minutes, × 2 attempts ~5.3 minutes, and
-× 3 attempts ~7.9 minutes. The eval has to stay re-runnable while I iterate, and
-I expect to re-run it roughly ten times, so ~8 minutes is the ceiling per run.
+Retries: **one or two maximum**, with backoff. At **4.6s per ticket** — the
+measured mean over the full 30 with the production prompt, not the Phase 0
+naive-prompt figure — 30 tickets × 1 attempt is ~2.3 minutes, × 2 attempts
+~4.6 minutes, and × 3 attempts ~6.9 minutes. The eval has to stay re-runnable
+while I iterate, and I expect to re-run it roughly ten times, so ~8 minutes is
+the ceiling per run.
 
 Fallback result: `category=other`, `priority=medium`, `confidence=0.0`,
 `escalate=true`, with a recorded reason. `medium` rather than `low` because
@@ -128,11 +130,17 @@ Do not escalate on it alone.
 
 Final confidence combines signals the model cannot influence:
 
-- input quality (empty body, very short, gibberish)
+- input quality, via two mechanisms and no others: the empty-body
+  short-circuit, and a body under `MIN_BODY_WORDS` (10). There is no
+  gibberish detection — `T-004` is caught because it is four words, not
+  because anything recognises it as noise.
 - rule conflicts (security keywords present but category is not `security`)
 - schema health (needed a repair retry? fell back?)
 - the model's own number, weighted low
-- optionally, self-consistency across two runs on ambiguous tickets
+- **not built:** self-consistency across two runs on ambiguous tickets. The
+  transport layer takes a `temperature` parameter so it would not need a
+  second function, but nothing runs a ticket twice. Listed under Next steps
+  in the README.
 
 Rule signals **lower confidence**; they never overwrite the model's decision.
 Two systems overruling each other is worse than one system flagging doubt.
