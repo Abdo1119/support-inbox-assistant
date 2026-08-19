@@ -14,7 +14,8 @@ runtime check.
 
 **Prerequisites.** Python 3.10+, and [Ollama](https://ollama.com/download)
 installed and running — the triage step talks to it over HTTP and every command
-below except `pytest` needs it up.
+below except `pytest` needs it up. The `ollama pull` step downloads about 2 GB,
+which is worth knowing on a metered connection or a small disk.
 
 Set two Ollama variables at user scope before the first run. Ollama reads them
 at startup, so quit and relaunch it afterwards (on Windows, quit from the tray
@@ -41,7 +42,7 @@ ollama pull llama3.2:3b
 python scripts/run_triage.py        # triages all 30, ~2.3 min
 python eval/run_eval.py             # writes eval/results.json
 uvicorn app.api:app                 # review queue at http://localhost:8000
-pytest                              # 17 tests, ~0.2s, no model needed
+pytest                              # 17 tests, ~0.5s, no model needed
 ```
 
 Fill in the four required values in `.env` before running anything — see
@@ -63,7 +64,7 @@ directory.
 | Variable | Required | Purpose |
 |---|---|---|
 | `LLM_BASE_URL` | yes | OpenAI-compatible endpoint, e.g. `http://localhost:11434/v1` |
-| `LLM_MODEL` | yes | Model tag as the endpoint reports it |
+| `LLM_MODEL` | yes | Model tag as the endpoint reports it, e.g. `llama3.2:3b` |
 | `LLM_API_KEY` | yes | Ignored by Ollama; a real credential against a hosted provider |
 | `LLM_TIMEOUT_SECONDS` | no | Seconds before a single attempt is abandoned |
 | `LLM_MAX_TOKENS` | no | Upper bound on generated tokens per call |
@@ -76,8 +77,12 @@ model name, credential, or policy value is embedded in tracked source. Pointing
 this at OpenAI or any other OpenAI-compatible provider is a `.env` edit, not a
 code change.
 
-`CONFIDENCE_THRESHOLD` is `0.8` in my `.env` and deliberately empty in
-`.env.example` — see *Choosing the threshold*.
+`CONFIDENCE_THRESHOLD` has no default and is deliberately empty in
+`.env.example`, because which tickets reach a human is a policy decision and
+not one to inherit silently. **I use `0.8`, and anyone reproducing the numbers
+in this README should use `0.8`** — every result here was measured at it. I
+picked it from the measured confidence distribution rather than by feel; see
+*Choosing the threshold* for the sweep it came from.
 
 Two Ollama variables are set at user scope. Ollama reads them at startup, so it
 must be fully quit and relaunched for a change to take effect.
@@ -515,12 +520,14 @@ example text appears verbatim in any of the 30.
 
 ## Tests
 
-17 cases, ~0.2s. Every one mocks the LLM at `app.llm_client.get_client` — the
-first boundary I don't own — so the real retry loop, backoff, exception
-classification and truncation detection all execute. None requires Ollama, a
-database, or a `.env`; verified by running the suite from a temp directory
-containing only `app/` and `tests/`, with `LLM_BASE_URL` pointed at a dead port
-so any test reaching the network fails loudly rather than passing quietly.
+17 cases, ~0.5s — 0.66s on the first run in a fresh clone, 0.43-0.46s on
+repeats once the caches are warm. Every one mocks the LLM at
+`app.llm_client.get_client` — the first boundary I don't own — so the real
+retry loop, backoff, exception classification and truncation detection all
+execute. None requires Ollama, a database, or a `.env`; verified by running
+the suite from a temp directory containing only `app/` and `tests/`, with
+`LLM_BASE_URL` pointed at a dead port so any test reaching the network fails
+loudly rather than passing quietly.
 
 These exist to answer one question: **how do I know the reliability layer
 works?** In the 30-ticket run only one ticket fell back and two needed repair,
