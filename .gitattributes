@@ -1,0 +1,26 @@
+# Line endings are normalized by git on the way into the repository, so a tool
+# that writes CRLF cannot commit CRLF. This is the durable fix: normalization
+# lives here, not in whichever editor or script happens to write a file next.
+* text=auto eol=lf
+
+# The types this project actually contains, stated explicitly so the intent is
+# readable rather than resting on git's content-sniffing heuristic.
+*.py           text eol=lf
+*.md           text eol=lf
+*.json         text eol=lf
+*.txt          text eol=lf
+*.html         text eol=lf
+*.css          text eol=lf
+*.js           text eol=lf
+.env.example   text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+
+# Binary: never normalized, never diffed as text. The SQLite database is
+# gitignored, but marking it means an accidental `git add -f` cannot corrupt it
+# by rewriting bytes that happen to look like line endings.
+*.db           binary
+*.sqlite3      binary
+*.png          binary
+*.jpg          binary
+*.ico          binary

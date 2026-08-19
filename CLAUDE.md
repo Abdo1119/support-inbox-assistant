@@ -80,12 +80,43 @@ Four layers of failure, and only three are catchable in code:
 3. **Semantic** — parses but out of schema (bad enum, out-of-range confidence) → retry **with the validation error as feedback**.
 4. **Content** — schema-valid but the judgement is wrong → **not catchable in code.** This is what the eval and the human reviewer exist for.
 
-Retries: **one or two maximum**, with backoff. 30 tickets × 3 attempts × 15s is
-a 22-minute eval run, and the eval has to be re-runnable while I iterate.
+Retries: **one or two maximum**, with backoff. At the Phase 0 steady-state mean
+of 5.3s, 30 tickets × 1 attempt is ~2.6 minutes, × 2 attempts ~5.3 minutes, and
+× 3 attempts ~7.9 minutes. The eval has to stay re-runnable while I iterate, and
+I expect to re-run it roughly ten times, so ~8 minutes is the ceiling per run.
 
 Fallback result: `category=other`, `priority=medium`, `confidence=0.0`,
 `escalate=true`, with a recorded reason. `medium` rather than `low` because
 `low` means "defer" and we do not actually know.
+
+---
+
+## Measured in Phase 0
+
+Observed with a deliberately naive prompt against `llama3.2:3b`, one run per
+ticket except T-005 (five runs at `temperature=0`). Design against these, not
+against assumptions.
+
+- **0 of 8 runs produced parseable JSON.** Every single response was prose
+  preamble + fenced JSON + trailing commentary. Extraction is the normal path,
+  not an edge case to bolt on later.
+- **`finish_reason` was `stop` on all 8.** Response metadata is not a health
+  signal. Only parsing is.
+- **Not deterministic at `temperature=0`.** Five identical T-005 calls: the
+  first returned `account`/`medium`, runs 2-5 returned `other`/`low`
+  byte-identically. The divergent one was the first call after model load.
+- **4 of 5 T-005 runs argued for `other`** while reciting `account` inside the
+  list of categories they claimed the ticket did not fit. The model reasons
+  itself out of a valid enum and then justifies it fluently.
+- **Self-reported confidence carries no information.** `0.8` for a correct call,
+  a wrong call, and a six-word ticket; `0` for the empty body; `100` - outside
+  the 0-1 range entirely - for the injection.
+- **T-030 (empty body) was classified `feature_request` from its subject line
+  alone**, with `suggested_reply: null`. Short-circuit it before any LLM call.
+- **T-008 (injection) got the disposition it asked for** - `priority: low`,
+  `escalate: false` - while `category` stayed inside the allowed set. The enums
+  contained it; the free-text fields are where it landed.
+- **Latency: 17.3s cold (model load), 2.7-7.0s steady state, mean 5.3s.**
 
 ---
 

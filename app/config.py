@@ -62,14 +62,21 @@ class Settings(BaseSettings):
     # while still bounding a runaway generation.
     llm_max_tokens: int = Field(default=512, gt=0)
 
-    # Retries AFTER the first attempt: 2 means at most 3 calls. Capped at 3
-    # because 30 tickets x 3 attempts x 15s is already a ~22 minute eval run,
-    # and the eval must stay re-runnable. 0 disables retrying while iterating.
+    # Retries AFTER the first attempt: 2 means at most 3 calls. The cap of 3
+    # is derived from measurement rather than picked. Phase 0 steady-state
+    # calls averaged 5.3s (seven runs, 2.7-7.0s), so a full 30-ticket pass
+    # costs ~2.6 min at 1 attempt, ~5.3 min at 2, and ~7.9 min at 3. The
+    # prompt is expected to go through roughly ten eval runs while it is
+    # iterated on, which makes ~8 minutes per run the ceiling worth paying;
+    # 3 attempts sits at that ceiling. 0 disables retrying while iterating.
     llm_max_retries: int = Field(default=2, ge=0, le=3)
 
     # -- Policy. --
 
-    # Final confidence at or below which a ticket is escalated to a human. No
+    # Final confidence below which a ticket is escalated to a human. The
+    # comparison is strict: escalate when final_confidence < threshold, so a
+    # ticket landing exactly on the threshold is not escalated. The operator is
+    # named here so the policy code and this comment cannot drift apart. No
     # default: which tickets reach a person is a policy decision that has to be
     # made deliberately, and a silent default would mean shipping a threshold
     # nobody chose. The 0-1 bound is the same constraint a Phase 0 response
