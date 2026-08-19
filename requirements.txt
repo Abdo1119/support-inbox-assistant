@@ -29,9 +29,11 @@ openai==2.17.0
 # Test runner.
 pytest==9.0.2
 
-# Required by starlette's TestClient, which the API tests use. It also arrives
-# via openai, but the tests import it directly, so it is declared directly
-# rather than depending on another package's dependency choices.
+# openai's HTTP transport. Pinned rather than left to resolve transitively
+# because an incompatible version breaks the install this file exists to make
+# reproducible. Nothing here imports httpx directly -- the tests mock at
+# get_client and never build a TestClient -- so this pin is about the install,
+# not about our own imports.
 httpx==0.28.1
 
 # Deliberately absent, since "justify every line" cuts both ways:

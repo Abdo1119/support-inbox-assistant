@@ -170,8 +170,12 @@ Worst realistic outcome: a mis-prioritized ticket in a queue a person is already
   Report it next to my numbers, or my numbers mean nothing.
 - 16 labels means **one ticket is worth 6.25 points**. Do not read small
   differences as improvements.
-- `T-030` has an empty body and `T-004` is gibberish — short-circuit these
-  before any LLM call.
+- **Short-circuit fires on an empty body only.** `T-030` has nothing to send,
+  which is a provable deterministic failure. `T-004` is gibberish but is still
+  sent to the model: "too short to be useful" is a judgement, not a fact, and a
+  length threshold separating `T-004` (26 chars / 4 words) from `T-023` (33 / 6)
+  is seven characters wide — fitted to a single example. `T-004` escalates on
+  the input-quality signal instead.
 - `T-008` is a prompt injection. `T-015` is phishing. `T-014` is a real
   vulnerability disclosure. `T-023` is already resolved by the customer.
 
@@ -203,11 +207,13 @@ disagreement in prose instead and leave the number alone.
 
 ---
 
-## Things I write myself — do not draft these
+## Sections I own the substance of
 
-- `README.md`
-- The system prompt and category definitions
-- Error analysis and limitations
-- The escalation threshold value and its justification
+- README rationale, error analysis, and limitations
+- The system prompt, category definitions and priority rubric
+- The escalation threshold and its justification
+- Every disclosure about what the labeled set influenced
 
-Suggest and critique these if I ask. Do not produce them unprompted.
+Drafting help is fine and the brief allows it explicitly. What is mine is the
+substance: the decisions, the measurements, and the disclosures. Suggest and
+critique these when asked; do not produce them unprompted.
