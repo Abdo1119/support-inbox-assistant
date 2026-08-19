@@ -128,6 +128,15 @@ class TriageRecord(BaseModel):
     model_confidence: float = Field(ge=0.0, le=1.0)
     final_confidence: float = Field(ge=0.0, le=1.0)
 
+    # Every doubt signal that fired, recorded whether or not the ticket
+    # escalated. A ticket can carry a reservation and still stay above the
+    # threshold -- T-004 scores 0.652 with a signal fired -- and without this
+    # the observation is computed and then thrown away. Distinct from
+    # escalation_reason, which says why the ESCALATION happened; this says what
+    # was observed. Plain strings, because it is data to read, not a structure
+    # to build on.
+    confidence_signals: list[str] = Field(default_factory=list)
+
     escalate: bool
     escalation_reason: str | None = None
     fallback_used: bool
