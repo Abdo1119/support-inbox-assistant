@@ -287,3 +287,25 @@ I'd rather say so than imply otherwise.
 ## Next steps
 
 <!-- TODO -->
+
+### Category boundaries as decision rules
+
+The definitions are written as rules for deciding, not as topic labels.
+The one that does the most work:
+
+- **billing** = money movement — charges, refunds, invoices, and
+  subscription changes that start or stop payment
+- **account** = access and identity — signing in, permissions, members,
+  and the customer's own data being exported or deleted
+
+Checked against all six labeled tickets in those two classes. T-017
+("cancel my subscription") is the one that tests it: it reads like an
+account request, but it is labeled billing because the intent is to stop
+being charged. Category follows intent, not the noun in the message.
+
+`security` carries an explicit exclusion: a security-adjacent thing that
+is merely malfunctioning — a check that fails, a certificate that
+expired — is a bug. It is security only when someone could actually
+reach data or take action they should not. Without that exclusion the
+model would over-trigger on security vocabulary appearing in ordinary
+defects.
