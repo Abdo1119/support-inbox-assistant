@@ -6,8 +6,8 @@ lands in a queue where a human reviews it.
 
 Nothing is ever sent to a customer. There is no send path in the codebase.
 
-> **Status: in progress.** Phases 0–3 complete (evidence gathering,
-> configuration, schemas, prompts). The triage pipeline, API, frontend, and eval are
+> **Status: in progress.** Phases 0–4 complete (evidence gathering,
+> configuration, schemas, prompts, transport). The triage pipeline, API, frontend, and eval are
 > not built yet. Sections below marked TODO are unwritten, not omitted.
 
 ---
@@ -211,21 +211,31 @@ label loading in the eval. Nothing outbound converts.
 `app/prompts.py` holds the system prompt, the ticket wrapper, and four
 synthetic few-shot examples delivered as user/assistant message turns.
 
-| Component                  | Approx. tokens |
-| -------------------------- | -------------- |
-| System prompt              | ~711           |
-| Few-shot examples (4)      | ~664           |
-| Full request (10 messages) | ~1418          |
+| Component                  | Tokens           |
+| -------------------------- | ---------------- |
+| System prompt              | ~711 (estimated) |
+| Few-shot examples (4)      | ~664 (estimated) |
+| Full request (10 messages) | 1313 (measured)  |
 
-With 512 generation tokens that is ~1930 against a context of 8192 — 24%
-used, 76% headroom. Verified with `ollama ps` rather than assumed.
+Measured over six tickets, the prompt runs 1300–1313 tokens. With 512
+generation tokens that is 1825 against a context of 8192 — 22% used, 78%
+headroom. Context verified with `ollama ps`; token counts read from
+`usage.prompt_tokens` on live calls.
+
+The chars/4 estimate ran 11% high against the measured counts, which is why
+the two component rows above sum to more than the measured total.
+
+Ollama caches the shared system + few-shot prefix (~1300 tokens), so only
+the first call after a prompt edit pays to evaluate it: 10.1s cold against a
+4.8s mean over the five tickets that followed.
 
 Ollama truncates from the **front** of the prompt silently, so an undersized
 context would drop the system prompt and leave the model blind rather than
 broken. The number was verified rather than assumed.
 
-The latency figures and the retry budget derived from them were measured on a
-partial GPU offload (20% CPU / 80% GPU), and are specific to this machine.
+The latency figures and the retry budget derived from them were measured on a partial GPU offload (32% CPU / 68% GPU at
+OLLAMA_CONTEXT_LENGTH=8192 — raising the context enlarges the KV cache
+and pushes more onto CPU)
 
 Leakage verification: the longest run of consecutive words shared between any
 few-shot example and any of the 16 labeled tickets is 3; there are zero runs
@@ -243,6 +253,42 @@ T-005, and the tone rule from T-012. I wrote them as general rules
 rather than per-ticket answers, and did not iterate wording against
 the score, but neither metric is a fully clean held-out number and
 I'd rather say so than imply otherwise.
+
+### Transport
+
+`app/llm_client.py` owns the call and nothing else. It returns raw text plus
+metadata and classifies failures without acting on them.
+
+The SDK's own `max_retries` defaults to 2. It is set to 0 explicitly, because
+left alone it multiplies against `LLM_MAX_RETRIES` for up to 9 calls per
+ticket, and those extra attempts never reach the logs.
+
+Retry budget at the measured 4.8s mean:
+
+| Attempts per ticket | 30 tickets |
+| ------------------- | ---------- |
+| 1                   | ~2.4 min   |
+| 2                   | ~4.8 min   |
+| 3                   | ~7.1 min   |
+
+Transport and repair share one per-ticket budget rather than nesting:
+`call_llm` takes `max_attempts` and reports `attempts` consumed, so the caller
+spends what is left on a repair. `elapsed_seconds` covers the whole sequence
+including backoff; `last_attempt_seconds` covers the final attempt alone, and
+is the figure to average for latency.
+
+Verified behaviour:
+
+| Condition          | Result                                                                        |
+| ------------------ | ----------------------------------------------------------------------------- |
+| Bad model name     | `NOT_FOUND`, non-retryable, 1 attempt of 3                                    |
+| Dead port          | `CONNECTION`, retryable, 3 attempts, 1s+2s backoff                            |
+| Empty message list | `EMPTY_MESSAGES`, 0 attempts, no HTTP call                                    |
+| `max_tokens=8`     | `finish_reason=length`, `truncated=True`, `ok=True`, partial content retained |
+
+Log hygiene verified: 18 captured log lines contained no API key, no ticket
+body, and no subject. Messages are logged as a count and a total character
+length, never as content.
 
 ### Confidence
 
