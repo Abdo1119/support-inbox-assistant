@@ -12,19 +12,41 @@ runtime check.
 
 ## Quick start
 
-```bash
+**Prerequisites.** Python 3.10+, and [Ollama](https://ollama.com/download)
+installed and running — the triage step talks to it over HTTP and every command
+below except `pytest` needs it up.
+
+Set two Ollama variables at user scope before the first run. Ollama reads them
+at startup, so quit and relaunch it afterwards (on Windows, quit from the tray
+rather than killing the process):
+
+```powershell
+setx OLLAMA_CONTEXT_LENGTH 8192
+setx OLLAMA_KEEP_ALIVE 30m
+```
+
+`OLLAMA_CONTEXT_LENGTH` matters more than it looks: Ollama truncates from the
+*front* of the prompt silently, so an undersized context drops the system prompt
+and leaves the model blind rather than broken. Both variables are explained
+under *Environment variables* below.
+
+```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1          # Windows
+.venv\Scripts\Activate.ps1          # POSIX: source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env              # then fill it in
+copy .env.example .env              # POSIX: cp .env.example .env
 
 ollama pull llama3.2:3b
 
 python scripts/run_triage.py        # triages all 30, ~2.3 min
 python eval/run_eval.py             # writes eval/results.json
 uvicorn app.api:app                 # review queue at http://localhost:8000
-pytest                              # 17 tests, 0.6s, no model needed
+pytest                              # 17 tests, ~0.2s, no model needed
 ```
+
+Fill in the four required values in `.env` before running anything — see
+*Environment variables*. The three optional knobs are commented out in the
+template and can stay that way.
 
 Run everything from the repo root — `.env` is resolved relative to the working
 directory.
@@ -378,6 +400,19 @@ Three of the five signals never fired:
 So the score is driven by two live signals and discriminates "did something
 fire", not a gradient.
 
+**T-015 shows a second limit of the keyword signal, and I found it rather than
+designed for it.** T-015 is a phishing message — "Dear Winner, you have been
+selected to receive a $500 gift card" with a link. It never uses the word
+phishing, or scam, or any other term on my list, so the keyword rule would have
+missed it completely. The model classified it `security`/`high` on its own and
+it escalated. Keyword matching only catches security problems that describe
+themselves, which is a real limit of rule-based signals over free text.
+
+I want to be exact about what that does and does not show. The model catching it
+was luck relative to my design, not behaviour I built or can rely on: T-015 is
+unlabeled, it is a single example, and one success is not a measurement. It is
+evidence about the rule's blind spot, not evidence about the model's reliability.
+
 The model's own number is weighted at 0.15 — small but non-zero, because it does
 carry signal at the extremes. It returned 0 on the empty body, 0 on T-023 (the
 customer had already solved their problem), and 100 on the injection; on T-004
@@ -480,7 +515,7 @@ example text appears verbatim in any of the 30.
 
 ## Tests
 
-17 cases, 0.6s. Every one mocks the LLM at `app.llm_client.get_client` — the
+17 cases, ~0.2s. Every one mocks the LLM at `app.llm_client.get_client` — the
 first boundary I don't own — so the real retry loop, backoff, exception
 classification and truncation detection all execute. None requires Ollama, a
 database, or a `.env`; verified by running the suite from a temp directory
