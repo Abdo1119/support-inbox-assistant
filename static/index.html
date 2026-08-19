@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support Inbox — review queue</title>
+
+<!--
+  One file: markup, styles, script. No build step, no framework, no CDN.
+
+  SECURITY: every string that came from a ticket or from the model is untrusted
+  and is written with textContent, never innerHTML. Ticket bodies are customer
+  input (T-008's body is a prompt injection), and model output is regenerated
+  whenever the prompt changes, so nothing here may depend on today's data
+  happening to be benign. There is no innerHTML in this file; containers are
+  emptied with replaceChildren(), not by assigning an empty string to innerHTML.
+
+  Ticket subjects and bodies come from /tickets.json, a copy of
+  data/tickets.json, because the API serves TriageRecord and that has no
+  subject or body. See the README.
+-->
+
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --line: #d9dde3;
+    --ink: #1c2127;
+    --muted: #666e79;
+    --accent: #2f5d8a;
+    --flag: #b4541f;
+    --ok: #2c6e49;
+    --bad: #9b2c2c;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header .note { color: var(--muted); font-size: 12px; }
+  header label { font-size: 13px; color: var(--muted); }
+  select, button { font: inherit; }
+  select { padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; }
+
+  main {
+    flex: 1;
+    display: flex;
+    min-height: 0;             /* lets the children scroll instead of the page */
+  }
+
+  #list {
+    width: 340px;
+    flex: 0 0 340px;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+  }
+
+  #detail {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 22px;
+    min-width: 0;              /* long words wrap instead of widening the page */
+  }
+
+  .row {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+    border-left: 4px solid transparent;
+    cursor: pointer;
+  }
+  .row:hover { background: #eef2f6; }
+  .row[aria-selected="true"] { background: #e3ecf5; }
+  .row.escalated { border-left-color: var(--flag); }
+
+  .row .top { display: flex; justify-content: space-between; gap: 8px; }
+  .row .id { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .row .conf { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row .meta { color: var(--muted); font-size: 12.5px; display: flex; gap: 6px; align-items: center; }
+  .row .subject {
+    font-size: 12.5px; color: var(--muted); margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .badge {
+    font-size: 11px; padding: 1px 6px; border-radius: 9px;
+    border: 1px solid var(--line); background: #fff;
+  }
+  .badge.flag { color: var(--flag); border-color: var(--flag); font-weight: 600; }
+  .badge.done { color: var(--ok); border-color: var(--ok); }
+  .badge.no { color: var(--bad); border-color: var(--bad); }
+
+  h2 { font-size: 16px; margin: 0 0 2px; }
+  section { margin-bottom: 18px; }
+  section > h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 5px; font-weight: 600;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 11px 13px;
+    white-space: pre-wrap;      /* keeps ticket line breaks, still escapes text */
+    overflow-wrap: anywhere;    /* a long injected string cannot widen the pane */
+  }
+  .card.flagged { border-left: 4px solid var(--flag); }
+
+  textarea {
+    width: 100%; min-height: 120px; padding: 10px;
+    font: inherit; border: 1px solid var(--line); border-radius: 5px;
+    resize: vertical;
+  }
+
+  .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button {
+    padding: 6px 13px; border-radius: 5px; border: 1px solid var(--line);
+    background: #fff; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #eef2f6; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #26496c; }
+
+  ul.signals { margin: 0; padding-left: 18px; }
+  ul.signals li { color: var(--flag); }
+
+  .state { padding: 26px; color: var(--muted); }
+  .state.error {
+    margin: 22px; padding: 16px; background: #fff5f3;
+    border: 1px solid #e5b4a8; border-radius: 6px; color: #7a2e18;
+  }
+  .state.error h2 { color: #7a2e18; }
+  .state.error pre {
+    background: #fff; border: 1px solid var(--line); border-radius: 4px;
+    padding: 8px 10px; overflow-x: auto; margin: 6px 0;
+  }
+  .dim { color: var(--muted); }
+  .flash { color: var(--ok); font-size: 13px; }
+</style>
+
+<header>
+  <h1>Support inbox — review queue</h1>
+  <label>Status
+    <select id="f-status">
+      <option value="">all</option>
+      <option value="pending" selected>pending</option>
+      <option value="approved">approved</option>
+      <option value="rejected">rejected</option>
+    </select>
+  </label>
+  <label>Escalated
+    <select id="f-escalated">
+      <option value="">all</option>
+      <option value="true">escalated only</option>
+      <option value="false">not escalated</option>
+    </select>
+  </label>
+  <span class="note" id="count"></span>
+  <span class="note">Nothing here is ever sent to a customer.</span>
+</header>
+
+<main>
+  <div id="list"></div>
+  <div id="detail"><p class="state">Loading…</p></div>
+</main>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// State. `records` is the API's TriageRecords; `sources` is the original
+// ticket text keyed by id. Both are refreshed in place after a write.
+// ---------------------------------------------------------------------------
+let records = [];
+let sources = {};
+let selectedId = null;
+
+const $ = (id) => document.getElementById(id);
+const listEl = $("list");
+const detailEl = $("detail");
+
+// --- DOM helpers -----------------------------------------------------------
+// el() is the only way text reaches the page, and it uses textContent, so
+// untrusted strings can never be parsed as markup. There is no innerHTML here.
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+
+function clear(node) {
+  node.replaceChildren();          // not innerHTML = ""
+}
+
+// --- Loading ---------------------------------------------------------------
+
+async function load() {
+  const status = $("f-status").value;
+  const escalated = $("f-escalated").value;
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (escalated) params.set("escalate", escalated);
+
+  try {
+    const [recRes, srcRes] = await Promise.all([
+      fetch("/api/tickets?" + params.toString()),
+      fetch("/tickets.json"),
+    ]);
+    if (!recRes.ok) throw new Error("API returned " + recRes.status);
+    if (!srcRes.ok) throw new Error("/tickets.json returned " + srcRes.status);
+
+    records = await recRes.json();
+    const list = await srcRes.json();
+    sources = {};
+    for (const t of list) sources[t.id] = t;
+
+    renderList();
+    if (records.length === 0) {
+      clear(detailEl);
+      detailEl.append(emptyState());
+    } else {
+      const stillThere = records.some((r) => r.ticket_id === selectedId);
+      select(stillThere ? selectedId : records[0].ticket_id);
+    }
+  } catch (err) {
+    showError(err);
+  }
+}
+
+function emptyState() {
+  const box = el("div", "state");
+  box.append(el("p", null, "No tickets match this filter."));
+  box.append(el("p", "dim", "Change the filters above, or set Status to “all”."));
+  return box;
+}
+
+function showError(err) {
+  clear(listEl);
+  clear(detailEl);
+  const box = el("div", "state error");
+  box.append(el("h2", null, "Cannot load the review queue"));
+  box.append(el("p", null, String(err && err.message ? err.message : err)));
+  box.append(el("p", null, "What to do:"));
+
+  const steps = el("div");
+  steps.append(el("p", null, "1. Is the API running? Start it from the repository root:"));
+  steps.append(el("pre", null, "python -m uvicorn app.api:app --reload"));
+  steps.append(el("p", null, "2. If it refuses to start, the database is missing or empty. Populate it first:"));
+  steps.append(el("pre", null, "python scripts/run_triage.py"));
+  box.append(steps);
+
+  const retry = el("button", "primary", "Retry");
+  retry.addEventListener("click", load);
+  box.append(retry);
+  detailEl.append(box);
+  $("count").textContent = "";
+}
+
+// --- List ------------------------------------------------------------------
+// Order comes from the API: escalated first, then lowest confidence first.
+
+function renderList() {
+  clear(listEl);
+  $("count").textContent =
+    records.length + (records.length === 1 ? " ticket" : " tickets") +
+    " · " + records.filter((r) => r.escalate).length + " escalated";
+
+  for (const r of records) {
+    const src = sources[r.ticket_id];
+    const row = el("div", "row" + (r.escalate ? " escalated" : ""));
+    row.dataset.id = r.ticket_id;
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", String(r.ticket_id === selectedId));
+
+    const top = el("div", "top");
+    top.append(el("span", "id", r.ticket_id));
+    top.append(el("span", "conf", r.final_confidence.toFixed(2)));
+    row.append(top);
+
+    const meta = el("div", "meta");
+    meta.append(el("span", null, r.category));
+    meta.append(el("span", null, "·"));
+    meta.append(el("span", null, r.priority));
+    if (r.escalate) meta.append(el("span", "badge flag", "ESCALATED"));
+    if (r.status === "approved") meta.append(el("span", "badge done", "approved"));
+    if (r.status === "rejected") meta.append(el("span", "badge no", "rejected"));
+    row.append(meta);
+
+    // Subject is customer input: textContent, like everything else.
+    row.append(el("div", "subject", src ? src.subject || "(no subject)" : "(source not found)"));
+
+    row.addEventListener("click", () => select(r.ticket_id));
+    listEl.append(row);
+  }
+}
+
+function select(id) {
+  selectedId = id;
+  for (const row of listEl.children) {
+    row.setAttribute("aria-selected", String(row.dataset.id === id));
+  }
+  renderDetail();
+}
+
+// --- Detail ----------------------------------------------------------------
+
+function renderDetail() {
+  const r = records.find((x) => x.ticket_id === selectedId);
+  clear(detailEl);
+  if (!r) { detailEl.append(el("p", "state", "Select a ticket.")); return; }
+  const src = sources[r.ticket_id];
+  const decided = r.status !== "pending";
+
+  // Heading
+  const head = el("div");
+  head.append(el("h2", null, r.ticket_id + " — " + r.category + " / " + r.priority));
+  const sub = el("div", "meta dim");
+  sub.append(el("span", null,
+    "final confidence " + r.final_confidence.toFixed(3) +
+    " · model said " + r.model_confidence.toFixed(2) +
+    " · retries " + r.retries));
+  if (r.fallback_used) sub.append(el("span", "badge flag", "FALLBACK"));
+  if (r.escalate) sub.append(el("span", "badge flag", "ESCALATED"));
+  sub.append(el("span", "badge" + (decided ? (r.status === "approved" ? " done" : " no") : ""), r.status));
+  head.append(sub);
+  detailEl.append(head);
+
+  // Original ticket — untrusted customer input.
+  const orig = el("section");
+  orig.append(el("h3", null, "Original ticket"));
+  const card = el("div", "card");
+  card.append(el("strong", null, src ? src.subject || "(no subject)" : "(source not found)"));
+  card.append(document.createTextNode("\n\n"));
+  card.append(document.createTextNode(src ? src.body || "(empty body)" : ""));
+  orig.append(card);
+  detailEl.append(orig);
+
+  // Model summary — untrusted model output.
+  const sum = el("section");
+  sum.append(el("h3", null, "Summary (model)"));
+  sum.append(el("div", "card", r.summary || "(empty — the fallback claims nothing)"));
+  detailEl.append(sum);
+
+  // Escalation reason and signals.
+  if (r.escalation_reason) {
+    const s = el("section");
+    s.append(el("h3", null, "Why this was escalated"));
+    s.append(el("div", "card flagged", r.escalation_reason));
+    detailEl.append(s);
+  }
+  const sig = el("section");
+  sig.append(el("h3", null, "Confidence signals"));
+  if (r.confidence_signals.length === 0) {
+    sig.append(el("p", "dim", "None fired."));
+  } else {
+    const ul = el("ul", "signals");
+    for (const s of r.confidence_signals) ul.append(el("li", null, s));
+    sig.append(ul);
+  }
+  detailEl.append(sig);
+
+  // Draft reply.
+  const reply = el("section");
+  reply.append(el("h3", null, r.edited_reply === null ? "Draft reply (model)" : "Draft reply (edited)"));
+  const box = el("textarea");
+  box.value = r.edited_reply === null ? r.suggested_reply : r.edited_reply;  // .value, not markup
+  box.id = "reply-box";
+  reply.append(box);
+  if (r.edited_reply !== null) {
+    const orig2 = el("details");
+    orig2.append(el("summary", "dim", "show the model's original draft"));
+    orig2.append(el("div", "card", r.suggested_reply));
+    reply.append(orig2);
+  }
+  detailEl.append(reply);
+
+  // Actions.
+  const actions = el("div", "actions");
+  const save = el("button", null, "Save edit");
+  save.addEventListener("click", () => saveEdit(r.ticket_id, box.value));
+  const approve = el("button", "primary", "Approve");
+  const reject = el("button", null, "Reject");
+  approve.disabled = decided;
+  reject.disabled = decided;
+  approve.addEventListener("click", () => decide(r.ticket_id, "approved"));
+  reject.addEventListener("click", () => decide(r.ticket_id, "rejected"));
+  actions.append(save, approve, reject);
+  const flash = el("span", "flash");
+  flash.id = "flash";
+  actions.append(flash);
+  if (decided) actions.append(el("span", "dim", "Already " + r.status + " — decisions are final."));
+  detailEl.append(actions);
+}
+
+// --- Writes ----------------------------------------------------------------
+// Both replace the single record from the response, rather than refetching the
+// whole list. The server's copy is the truth; nothing is patched locally.
+
+function replaceRecord(updated) {
+  const i = records.findIndex((x) => x.ticket_id === updated.ticket_id);
+  if (i >= 0) records[i] = updated; else records.push(updated);
+  renderList();
+  select(updated.ticket_id);
+}
+
+async function send(url, method, body, okMessage) {
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let detail = "HTTP " + res.status;
+      try {
+        const j = await res.json();
+        if (typeof j.detail === "string") detail = j.detail;
+      } catch (_) { /* body was not JSON; the status is what we have */ }
+      const flash = $("flash");
+      if (flash) { flash.style.color = "var(--bad)"; flash.textContent = detail; }
+      return;
+    }
+    replaceRecord(await res.json());
+    const flash = $("flash");
+    if (flash) { flash.style.color = "var(--ok)"; flash.textContent = okMessage; }
+  } catch (err) {
+    showError(err);
+  }
+}
+
+function saveEdit(id, text) {
+  if (!text.trim()) {
+    const flash = $("flash");
+    if (flash) { flash.style.color = "var(--bad)"; flash.textContent = "The reply cannot be empty."; }
+    return;
+  }
+  send("/api/tickets/" + encodeURIComponent(id), "PATCH", { edited_reply: text }, "Edit saved.");
+}
+
+function decide(id, status) {
+  send("/api/tickets/" + encodeURIComponent(id) + "/decision", "POST", { status }, "Marked " + status + ".");
+}
+
+// --- Wiring ----------------------------------------------------------------
+$("f-status").addEventListener("change", load);
+$("f-escalated").addEventListener("change", load);
+load();
+</script>

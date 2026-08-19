@@ -62,6 +62,19 @@ change.
 The justification lives in this README rather than in the template, so nobody
 inherits a threshold they did not choose — see *Choosing the threshold*.
 
+### Why `static/tickets.json` exists
+
+It is a copy of `data/tickets.json`. The API serves `TriageRecord`, which
+holds no ticket subject or body, and only `static/` is mounted — so the review
+page has no other way to show a reviewer the customer's original message.
+
+The alternative was mounting `data/` in `app/api.py`, which would also serve
+`data/labels.json` — the evaluation ground truth — over HTTP from the reviewer
+UI. The copy is deliberate, not an accident: `data/tickets.json` is fixed
+provided input that is never regenerated, so the two cannot drift. It is
+tracked in the repository because the page does not work without it.
+
+
 ## Running the eval
 
 <!-- TODO: after the evaluation harness exists -->
@@ -222,7 +235,7 @@ rather than mediocrity.
 
 What they do not catch: 7 of 8 Phase 0 runs returned the ticket subject verbatim
 as the summary, all of them 11 characters or more. That is a content failure,
-invisible to a length constraint.
+invisible to a length con straint.
 
 ### Category boundaries as decision rules
 
